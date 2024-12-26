@@ -39,7 +39,7 @@ class Seller:
         return r.status_code
 
     def add_stock_level(
-        self, seller_id: str, store_id: str, book_id: str, add_stock_num: int
+            self, seller_id: str, store_id: str, book_id: str, add_stock_num: int
     ) -> int:
         json = {
             "user_id": seller_id,
@@ -52,3 +52,20 @@ class Seller:
         headers = {"token": self.token}
         r = requests.post(url, headers=headers, json=json)
         return r.status_code
+
+    def confirm_shipping(self, seller_id, order_id: str) -> int:
+        """
+        卖家确认发货接口
+        :param order_id: 订单 ID
+        :return: HTTP 响应状态码
+        """
+        json = {
+            "user_id": seller_id,
+            "order_id": order_id,
+        }
+        url = urljoin(self.url_prefix, "confirm_shipping")
+        headers = {"token": self.token}
+        r = requests.post(url, headers=headers, json=json)
+        return r.status_code
+
+

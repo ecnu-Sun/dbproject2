@@ -1,97 +1,107 @@
 import os
-import sqlite3 as sqlite
+import psycopg2
 import random
 import base64
 import simplejson as json
 
 
-class Book:
-    id: str
+class BookDetails:
+    book_id: str
     title: str
     author: str
     publisher: str
     original_title: str
     translator: str
-    pub_year: str
-    pages: int
-    price: int
-    currency_unit: str
-    binding: str
-    isbn: str
-    author_intro: str
-    book_intro: str
-    content: str
-    tags: [str]
-    pictures: [bytes]
+    publication_year: str
+    page_count: int
+    price_in_cents: int
+    currency: str
+    binding_type: str
+    isbn_code: str
+    author_description: str
+    book_summary: str
+    content_description: str
+    genre_tags: [str]
+    images: [bytes]
 
     def __init__(self):
-        self.tags = []
-        self.pictures = []
+        self.genre_tags = []
+        self.images = []
 
 
-class BookDB:
-    def __init__(self, large: bool = False):
-        parent_path = os.path.dirname(os.path.dirname(__file__))
-        self.db_s = os.path.join(parent_path, "data/book.db")
-        self.db_l = os.path.join(parent_path, "data/book_lx.db")
-        if large:
-            self.book_db = self.db_l
-        else:
-            self.book_db = self.db_s
-
-    def get_book_count(self):
-        conn = sqlite.connect(self.book_db)
-        cursor = conn.execute("SELECT count(id) FROM book")
-        row = cursor.fetchone()
-        return row[0]
-
-    def get_book_info(self, start, size) -> [Book]:
-        books = []
-        conn = sqlite.connect(self.book_db)
-        cursor = conn.execute(
-            "SELECT id, title, author, "
-            "publisher, original_title, "
-            "translator, pub_year, pages, "
-            "price, currency_unit, binding, "
-            "isbn, author_intro, book_intro, "
-            "content, tags, picture FROM book ORDER BY id "
-            "LIMIT ? OFFSET ?",
-            (size, start),
+class BookDatabase:
+    def __init__(self, use_large: bool):
+        self.connection = psycopg2.connect(
+            dbname="bookstore", user="postgres", password="Qq132465321", host="127.0.0.1", port="5432"
         )
-        for row in cursor:
-            book = Book()
-            book.id = row[0]
-            book.title = row[1]
-            book.author = row[2]
-            book.publisher = row[3]
-            book.original_title = row[4]
-            book.translator = row[5]
-            book.pub_year = row[6]
-            book.pages = row[7]
-            book.price = row[8]
 
-            book.currency_unit = row[9]
-            book.binding = row[10]
-            book.isbn = row[11]
-            book.author_intro = row[12]
-            book.book_intro = row[13]
-            book.content = row[14]
-            tags = row[15]
+    def get_total_book_count(self):
+        """
+        获取 books 表中的总记录数
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT count(id) FROM books")
+        result = cursor.fetchone()
+        cursor.close()
+        return result[0]
 
-            picture = row[16]
+    def fetch_books(self, offset: int, limit: int) -> [BookDetails]:
+        """
+        获取 books 表中的书籍信息
+        :param offset: 起始记录位置
+        :param limit: 获取的书籍数量
+        :return: 书籍对象列表
+        """
+        books_list = []
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """
+            SELECT id, title, author, 
+                publisher, original_title, 
+                translator, pub_year, pages, 
+                price, currency_unit, binding, 
+                isbn, author_intro, book_intro, 
+                content, tags, picture 
+            FROM books 
+            ORDER BY id 
+            LIMIT %s OFFSET %s
+            """,
+            (limit, offset),
+        )
+        for record in cursor:
+            book = BookDetails()
+            book.book_id = record[0]
+            book.title = record[1]
+            book.author = record[2]
+            book.publisher = record[3]
+            book.original_title = record[4]
+            book.translator = record[5]
+            book.publication_year = record[6]
+            book.page_count = record[7]
+            book.price_in_cents = record[8]
 
-            for tag in tags.split("\n"):
+            book.currency = record[9]
+            book.binding_type = record[10]
+            book.isbn_code = record[11]
+            book.author_description = record[12]
+            book.book_summary = record[13]
+            book.content_description = record[14]
+            genre_tags = record[15]
+
+            image_data = record[16]
+
+            # 处理标签
+            for tag in genre_tags.split("\n"):
                 if tag.strip() != "":
-                    book.tags.append(tag)
-            for i in range(0, random.randint(0, 9)):
-                if picture is not None:
-                    encode_str = base64.b64encode(picture).decode("utf-8")
-                    book.pictures.append(encode_str)
-            books.append(book)
-            # print(tags.decode('utf-8'))
+                    book.genre_tags.append(tag)
 
-            # print(book.tags, len(book.picture))
-            # print(book)
-            # print(tags)
+            # 处理图片
+            for _ in range(0, random.randint(0, 9)):
+                if image_data is not None:
+                    encoded_image = base64.b64encode(image_data).decode("utf-8")
+                    book.images.append(encoded_image)
 
-        return books
+            books_list.append(book)
+
+        cursor.close()
+        return books_list

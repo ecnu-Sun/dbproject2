@@ -4,47 +4,86 @@ from urllib.parse import urljoin
 from fe.access.auth import Auth
 
 
-class Buyer:
-    def __init__(self, url_prefix, user_id, password):
-        self.url_prefix = urljoin(url_prefix, "buyer/")
-        self.user_id = user_id
-        self.password = password
-        self.token = ""
-        self.terminal = "my terminal"
-        self.auth = Auth(url_prefix)
-        code, self.token = self.auth.login(self.user_id, self.password, self.terminal)
-        assert code == 200
+class Customer:
+    def __init__(self, base_url, user_identifier, user_password):
+        self.base_url = urljoin(base_url, "buyer/")
+        self.user_identifier = user_identifier
+        self.user_password = user_password
+        self.auth_token = ""
+        self.device_info = "my terminal"
+        self.authentication = Auth(base_url)
+        status_code, self.auth_token = self.authentication.login(self.user_identifier, self.user_password, self.device_info)
+        assert status_code == 200
 
-    def new_order(self, store_id: str, book_id_and_count: [(str, int)]) -> (int, str):
-        books = []
-        for id_count_pair in book_id_and_count:
-            books.append({"id": id_count_pair[0], "count": id_count_pair[1]})
-        json = {"user_id": self.user_id, "store_id": store_id, "books": books}
-        # print(simplejson.dumps(json))
-        url = urljoin(self.url_prefix, "new_order")
-        headers = {"token": self.token}
-        r = requests.post(url, headers=headers, json=json)
-        response_json = r.json()
-        return r.status_code, response_json.get("order_id")
+    def place_order(self, store_identifier: str, items: [(str, int)]) -> (int, str):
+        order_items = [{"id": item[0], "count": item[1]} for item in items]
+        request_data = {"user_id": self.user_identifier, "store_id": store_identifier, "books": order_items}
+        url = urljoin(self.base_url, "new_order")
+        headers = {"token": self.auth_token}
+        response = requests.post(url, headers=headers, json=request_data)
+        response_data = response.json()
+        return response.status_code, response_data.get("order_id")
 
-    def payment(self, order_id: str):
-        json = {
-            "user_id": self.user_id,
-            "password": self.password,
-            "order_id": order_id,
+    def process_payment(self, order_identifier: str):
+        request_data = {
+            "user_id": self.user_identifier,
+            "password": self.user_password,
+            "order_id": order_identifier,
         }
-        url = urljoin(self.url_prefix, "payment")
-        headers = {"token": self.token}
-        r = requests.post(url, headers=headers, json=json)
-        return r.status_code
+        url = urljoin(self.base_url, "payment")
+        headers = {"token": self.auth_token}
+        response = requests.post(url, headers=headers, json=request_data)
+        return response.status_code
 
-    def add_funds(self, add_value: str) -> int:
-        json = {
-            "user_id": self.user_id,
-            "password": self.password,
-            "add_value": add_value,
+    def add_balance(self, amount: str) -> int:
+        request_data = {
+            "user_id": self.user_identifier,
+            "password": self.user_password,
+            "add_value": amount,
         }
-        url = urljoin(self.url_prefix, "add_funds")
-        headers = {"token": self.token}
-        r = requests.post(url, headers=headers, json=json)
-        return r.status_code
+        url = urljoin(self.base_url, "add_funds")
+        headers = {"token": self.auth_token}
+        response = requests.post(url, headers=headers, json=request_data)
+        return response.status_code
+
+    def confirm_order_receipt(self, order_identifier: str) -> int:
+        """
+        Confirm receipt of an order
+        :param order_identifier: The ID of the order
+        :return: HTTP status code
+        """
+        request_data = {
+            "user_id": self.user_identifier,
+            "order_id": order_identifier,
+        }
+        url = urljoin(self.base_url, "confirm_receipt")
+        headers = {"token": self.auth_token}
+        response = requests.post(url, headers=headers, json=request_data)
+        return response.status_code
+
+    def retrieve_orders(self) -> (int, list):
+        """
+        Retrieve the user's order history
+        :return: HTTP status code and order list (if successful)
+        """
+        url = urljoin(self.base_url, f"query_orders?user_id={self.user_identifier}")
+        headers = {"token": self.auth_token}
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            return response.status_code, response.json().get("orders", [])
+        return response.status_code, []
+
+    def revoke_order(self, order_identifier: str) -> int:
+        """
+        Cancel an order
+        :param order_identifier: The ID of the order
+        :return: HTTP status code
+        """
+        request_data = {
+            "user_id": self.user_identifier,
+            "order_id": order_identifier,
+        }
+        url = urljoin(self.base_url, "cancel_order")
+        headers = {"token": self.auth_token}
+        response = requests.post(url, headers=headers, json=request_data)
+        return response.status_code
